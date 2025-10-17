@@ -1,0 +1,9 @@
+node_modules/
+.env
+premove-backend.zip
+preMove.zip
+dist/
+build/
+*.log
+.DS_Store
+Thumbs.db
