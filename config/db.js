@@ -1,6 +1,5 @@
 import mysql from "mysql2";
 
-// Create a connection pool (recommended for production)
 const db = mysql.createPool({
   host: "srv917.hstgr.io",
   port: 3306,
@@ -8,17 +7,16 @@ const db = mysql.createPool({
   password: "O$y2W$=[6!N#",
   database: "u874477730_unitedgulf",
   waitForConnections: true,
-  connectionLimit: 10,   // adjust if needed
+  connectionLimit: 10,
   queueLimit: 0,
 });
 
-// ✅ Test database connection once when server starts
 db.getConnection((err, connection) => {
   if (err) {
-    console.error("❌ Database connect error:", err.message);
+    console.error("❌ Database connect error:", err); // full error object
   } else {
     console.log("✅ MySQL Pool Connected...");
-    connection.release(); // release connection back to pool
+    connection.release();
   }
 });
 
