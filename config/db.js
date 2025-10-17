@@ -1,23 +1,36 @@
 import mysql from "mysql2";
 
 const db = mysql.createPool({
+
+//     DB_HOST=srv917.hstgr.io
+// DB_PORT=3306
+// DB_USER=u874477730_unitedgulf
+// DB_PASS=O$y2W$=[6!N#
+// DB_NAME=u874477730_unitedgulf
+
+//   host: "localhost",
+// //   port: 3306,          // change to 3306 if that's your MySQL port
+//   user: "root",
+//   password: "root",
+//   database: "premove",
+
   host: "srv917.hstgr.io",
-  port: 3306,
+  port: 3306,          // change to 3306 if that's your MySQL port
   user: "u874477730_unitedgulf",
   password: "O$y2W$=[6!N#",
   database: "u874477730_unitedgulf",
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
+  // waitForConnections: true,
+  // connectionLimit: 10,   // adjust based on load
+  // queueLimit: 0,
 });
 
-db.getConnection((err, connection) => {
+db.getConnection((err) => {
   if (err) {
-    console.error("❌ Database connect error:", err); // full error object
+    console.error("❌ Database connect error:", err);
   } else {
-    console.log("✅ MySQL Pool Connected...");
-    connection.release();
+    console.log("✅ MySQL Connected...");
   }
 });
 
-export default db;
+
+export default db
