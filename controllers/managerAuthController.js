@@ -6,55 +6,6 @@ const JWT_SECRET = "YOUR_SECRET_KEY";
 let managerOtpStore = {}; // in-memory OTP store
 
 // ✅ Send OTP
-// export const managerSendOtp = async (req, res) => {
-//   const { phone } = req.body;
-//   if (!phone) return res.json({ success: false, error: "Missing phone" });
-
-//   try {
-//     const [rows] = await db
-//       .promise()
-//       .query(
-//         "SELECT * FROM ele_customer_manager WHERE phone_number = ? AND user_role = ?",
-//         [phone, "manager"]
-//       );
-
-//     if (!rows.length)
-//       return res.json({ success: false, error: "Manager not found" });
-
-//     // Generate 4-digit OTP
-//     const otp = Math.floor(1000 + Math.random() * 9000).toString();
-//     console.log("Manager OTP:", otp);
-
-//     // Save OTP in memory
-//     managerOtpStore[phone] = { otp, expires: Date.now() + 5 * 60 * 1000 };
-
-//     // Save in DB
-//     await db
-//       .promise()
-//       .query(
-//         "UPDATE ele_customer_manager SET temp_otp = ? WHERE phone_number = ?",
-//         [otp, phone]
-//       );
-
-//     // Send via WhatsApp API
-//     const msg = `Your OTP is ${otp}`;
-//     // const url = `http://whatsappapi.keepintouch.co.in/api/sendText?token=6103d1857f26a4cb49bbc8cc&phone=91${phone}&message=${encodeURIComponent(
-//     //   msg
-//     // )}`;
-//     const url = `http://whatsappapi.keepintouch.co.in/api/sendText?token=425&phone=91${phone}&message=${encodeURIComponent(
-//       msg
-//     )}`;
-
-//     const response = await fetch(url);
-//     const text = await response.text();
-//     console.log("WhatsApp API response:", text);
-
-//     res.json({ success: true });
-//   } catch (err) {
-//     console.error("❌ Manager send OTP error:", err);
-//     res.json({ success: false, error: "Server error" });
-//   }
-// };
 export const managerSendOtp = async (req, res) => {
   const { phone } = req.body;
   if (!phone) return res.json({ success: false, error: "Missing phone" });
@@ -113,53 +64,6 @@ export const managerSendOtp = async (req, res) => {
 };
 
 // ✅ Verify OTP
-// export const managerVerifyOtp = async (req, res) => {
-//   const { phone, otp } = req.body;
-//   const record = managerOtpStore[phone];
-//   if (!record) return res.json({ success: false, error: "OTP not found" });
-//   if (record.expires < Date.now())
-//     return res.json({ success: false, error: "OTP expired" });
-//   if (record.otp != otp)
-//     return res.json({ success: false, error: "Invalid OTP" });
-
-//   delete managerOtpStore[phone]; // OTP verified, remove from memory
-
-//   try {
-//     const [rows] = await db
-//       .promise()
-//       .query("SELECT * FROM ele_customer_manager WHERE phone_number = ?", [
-//         phone,
-//       ]);
-
-//     if (!rows.length)
-//       return res.json({ success: false, error: "Manager not found" });
-
-//     const manager = rows[0];
-//     const token = jwt.sign(
-//       { id: manager.id, phone, role: "manager" },
-//       JWT_SECRET,
-//       { expiresIn: "30d" }
-//     );
-//     const expiry = Date.now() + 30 * 24 * 60 * 60 * 1000;
-
-//     await db
-//       .promise()
-//       .query(
-//         "UPDATE ele_customer_manager SET jwt_token = ?, jwt_expiry = ? WHERE phone_number = ?",
-//         [token, expiry, phone]
-//       );
-
-//     res.json({
-//       success: true,
-//       token,
-//       expiry,
-//       user: { id: manager.id, name: manager.name, type: "manager" },
-//     });
-//   } catch (err) {
-//     console.error("❌ Manager verify OTP error:", err);
-//     res.json({ success: false, error: "Server error" });
-//   }
-// };
 export const managerVerifyOtp = async (req, res) => {
   const { phone, otp } = req.body;
 
@@ -337,7 +241,6 @@ export const getCustomerDetails = async (req, res) => {
   }
 };
 
-// todays changes 15/10/2025
 // ✅ Fetch all registered customers with their matching leads
 // export const getManagerCustomers = async (req, res) => {
 //   try {
@@ -406,7 +309,6 @@ export const getManagerCustomers = async (req, res) => {
   try {
     const managerId = req.user.id;
 
-    // Fetch manager details including role
     const [managerRow] = await db
       .promise()
       .query(
@@ -430,37 +332,34 @@ export const getManagerCustomers = async (req, res) => {
     let where = "";
     let params = [];
 
-    // Apply filters only if user is not Head_Manager
     if (role !== "Head_Manager") {
       where += "WHERE l.city_name = ?";
       params.push(assignLocation);
     } else {
-      where += "WHERE 1"; // dummy condition to make adding search easier
+      where += "WHERE 1";
     }
 
-    // Search filter
     if (search) {
       where += ` AND (l.cust_name LIKE ? OR l.cust_email LIKE ? OR l.cust_mobile LIKE ?)`;
       params.push(search, search, search);
     }
 
-    // Fetch unique customers
+    // ✅ Fixed query: wrap non-aggregated columns in MAX()
     const [customers] = await db.promise().query(
       `
       SELECT l.cust_mobile AS customer_mobile_no,
-             l.cust_name AS full_name,
-             l.cust_email AS customer_email,
+             MAX(l.cust_name) AS full_name,
+             MAX(l.cust_email) AS customer_email,
              COUNT(l.id) AS total_leads
       FROM ele_customer_lead l
       ${where}
       GROUP BY l.cust_mobile
-      ORDER BY l.cust_name
+      ORDER BY MAX(l.cust_name)
       LIMIT ? OFFSET ?
       `,
       [...params, limit, offset]
     );
 
-    // Total unique customers count
     const [[{ total }]] = await db.promise().query(
       `
       SELECT COUNT(DISTINCT l.cust_mobile) AS total
@@ -543,9 +442,18 @@ export const getCustomerLeads = async (req, res) => {
     }
 
     let query = `
-      SELECT l.id, l.cust_name, l.cust_email, l.cust_mobile, l.city_name,
-             l.moving_from, l.moving_to, l.moving_date, l.moving_type,
-             l.ele_quotation_for_customer, l.lead_date, l.created_date,
+      SELECT l.id,
+             MAX(l.cust_name) AS cust_name,
+             MAX(l.cust_email) AS cust_email,
+             MAX(l.cust_mobile) AS cust_mobile,
+             MAX(l.city_name) AS city_name,
+             MAX(l.moving_from) AS moving_from,
+             MAX(l.moving_to) AS moving_to,
+             MAX(l.moving_date) AS moving_date,
+             MAX(l.moving_type) AS moving_type,
+             MAX(l.ele_quotation_for_customer) AS ele_quotation_for_customer,
+             MAX(l.lead_date) AS lead_date,
+             MAX(l.created_date) AS created_date,
              COUNT(i.id) AS inventory_count
       FROM ele_customer_lead l
       LEFT JOIN ele_customer_inventory i 
@@ -556,7 +464,6 @@ export const getCustomerLeads = async (req, res) => {
 
     if (role === "manager") {
       const finalManagerId = userId || managerId;
-
       query += `
         WHERE l.cust_mobile = ?
           AND EXISTS (
@@ -567,19 +474,15 @@ export const getCustomerLeads = async (req, res) => {
           )
       `;
       params.push(mobile, finalManagerId);
-    } else if (role === "Head_Manager") {
-      // Head_Manager can see all leads
-      query += ` WHERE l.cust_mobile = ? `;
-      params.push(mobile);
     } else {
-      // fallback for other roles
+      // Head_Manager or fallback
       query += ` WHERE l.cust_mobile = ? `;
       params.push(mobile);
     }
 
     query += `
       GROUP BY l.id
-      ORDER BY l.lead_date DESC
+      ORDER BY MAX(l.lead_date) DESC
     `;
 
     const [leads] = await db.promise().query(query, params);
@@ -659,48 +562,7 @@ export const authMiddleware = (req, res, next) => {
   }
 };
 
-// todays by lead for managere
-// export const getDashboardCustomersBySpanco = async (req, res) => {
-//   try {
-//     const spanco = req.query.spanco || "a"; // default a
-//     if (!spanco) {
-//       return res.status(400).json({
-//         success: false,
-//         error: "Missing spanco value",
-//       });
-//     }
-
-//     const { date_from, date_to } = req.query;
-
-//     let query = `
-//       SELECT id, cust_name, cust_email, cust_mobile, city_name, moving_from,
-//              moving_to, moving_date, moving_type, ele_quotation_for_customer, lead_date,created_date
-//       FROM ele_customer_lead
-//       WHERE spanco IN ('a','p')
-//         AND delete_status = 0
-//     `;
-//     const params = [spanco];
-
-//     if (date_from && date_to) {
-//       // Custom range filter
-//       query += ` AND DATE(created_date) BETWEEN ? AND ? `;
-//       params.push(date_from, date_to);
-//     } else {
-//       // Default: only today's leads
-//       query += ` AND DATE(created_date) = CURDATE() `;
-//     }
-
-//     query += ` ORDER BY created_date DESC LIMIT 50`;
-
-//     const [customers] = await db.promise().query(query, params);
-
-//     res.json({ success: true, customers });
-//   } catch (err) {
-//     console.error("❌ Error fetching customers by spanco:", err);
-//     res.status(500).json({ success: false, error: "Server error" });
-//   }
-// };
-
+// ✅ Fetch customers by spanco
 export const getDashboardCustomersBySpanco = async (req, res) => {
   try {
     const { spanco, date_from, date_to } = req.query;
@@ -805,11 +667,9 @@ export const updateManagerDetails = async (req, res) => {
 
 export const getCustomerLocation = async (req, res) => {
   try {
-    // const customerId = req.params.id;
     const customerId = req.params.id; // dynamic ID
     console.log("customer idfrm backend", customerId);
 
-    // console.log("customer id", customerId);
     // ✅ Fetch movingFrom lat/long from ele_customer_lead
     const [rows] = await db.promise().query(
       `SELECT id, cust_name, cust_mobile, cust_email,
@@ -848,6 +708,73 @@ export const getCustomerLocation = async (req, res) => {
   }
 };
 
+// ✅ Fetch visit requests
+// export const getVisitRequests = async (req, res) => {
+//   try {
+//     const { managerId } = req.query;
+//     console.log("manager id", managerId);
+//     if (!managerId) {
+//       return res
+//         .status(400)
+//         .json({ success: false, message: "managerId is required" });
+//     }
+
+//     const [managerRows] = await db
+//       .promise()
+//       .query(
+//         "SELECT assign_location, user_role FROM ele_customer_manager WHERE id = ?",
+//         [managerId]
+//       );
+
+//     if (!managerRows.length) {
+//       return res
+//         .status(404)
+//         .json({ success: false, message: "Manager not found" });
+//     }
+
+//     const { assign_location: assignLocation, user_role: role } = managerRows[0];
+
+//     let query = `
+//       SELECT vr.id AS visit_id,
+//              vr.schedule_date,
+//              vr.time_from,
+//              vr.time_to,
+//              vr.status,
+//              c.id AS lead_id,
+//              MAX(c.cust_name) AS cust_name,
+//              MAX(c.cust_email) AS cust_email,
+//              MAX(c.cust_mobile) AS cust_mobile,
+//              MAX(c.moving_from) AS moving_from,
+//              MAX(c.moving_to) AS moving_to,
+//              MAX(c.city_name) AS city_name,
+//              MAX(c.state_name) AS state_name,
+//              MAX(c.moving_type) AS moving_type,
+//              COUNT(inv.id) AS inventory_count
+//       FROM customer_visite_request vr
+//       JOIN ele_customer_lead c ON c.id = vr.lead_id
+//       LEFT JOIN ele_customer_inventory inv ON inv.lead_unique_id = c.id
+//     `;
+
+//     const params = [];
+
+//     if (role !== "Head_Manager") {
+//       query += ` WHERE c.city_name = ? `;
+//       params.push(assignLocation);
+//     }
+
+//     query += `
+//       GROUP BY vr.id, c.id
+//       ORDER BY vr.created_at DESC
+//     `;
+
+//     const [requests] = await db.promise().query(query, params);
+
+//     return res.json({ success: true, requests });
+//   } catch (err) {
+//     console.error("Error fetching visit requests:", err);
+//     return res.status(500).json({ success: false, message: err.message });
+//   }
+// };
 export const getVisitRequests = async (req, res) => {
   try {
     const { managerId } = req.query;
@@ -858,7 +785,6 @@ export const getVisitRequests = async (req, res) => {
         .json({ success: false, message: "managerId is required" });
     }
 
-    // Fetch manager details including role
     const [managerRows] = await db
       .promise()
       .query(
@@ -875,19 +801,29 @@ export const getVisitRequests = async (req, res) => {
     const { assign_location: assignLocation, user_role: role } = managerRows[0];
 
     let query = `
-      SELECT vr.id AS visit_id, vr.schedule_date, vr.time_from, vr.status, vr.time_to,
-             c.id AS lead_id, c.cust_name, c.cust_email, c.cust_mobile,
-             c.moving_from, c.moving_to, c.city_name, c.state_name, c.moving_type,
+      SELECT vr.id AS visit_id,
+             vr.schedule_date,
+             vr.time_from,
+             vr.time_to,
+             vr.status,
+             c.id AS lead_id,
+             MAX(c.cust_name) AS cust_name,
+             MAX(c.cust_email) AS cust_email,
+             MAX(c.cust_mobile) AS cust_mobile,
+             MAX(c.moving_from) AS moving_from,
+             MAX(c.moving_to) AS moving_to,
+             MAX(c.city_name) AS city_name,
+             MAX(c.state_name) AS state_name,
+             MAX(c.moving_type) AS moving_type,
              COUNT(inv.id) AS inventory_count
       FROM customer_visite_request vr
       JOIN ele_customer_lead c ON c.id = vr.lead_id
-      LEFT JOIN ele_customer_inventory inv ON inv.lead_unique_id = c.id
+      LEFT JOIN ele_customer_inventory inv ON inv.lead_unique_id = c.id AND inv.deleted_inventory = 0
     `;
 
     const params = [];
 
     if (role !== "Head_Manager") {
-      // Normal manager: filter by assign_location
       query += ` WHERE c.city_name = ? `;
       params.push(assignLocation);
     }
@@ -906,7 +842,83 @@ export const getVisitRequests = async (req, res) => {
   }
 };
 
-// =================
+// ✅ Fetch today's visit requests
+// export const getTodayVisitRequests = async (req, res) => {
+//   try {
+//     const { managerId } = req.query;
+//     console.log("manager id", managerId);
+
+//     if (!managerId) {
+//       return res
+//         .status(400)
+//         .json({ success: false, message: "managerId is required" });
+//     }
+
+//     const [managerRows] = await db
+//       .promise()
+//       .query(
+//         "SELECT assign_location, user_role FROM ele_customer_manager WHERE id = ?",
+//         [managerId]
+//       );
+
+//     if (!managerRows.length) {
+//       return res
+//         .status(404)
+//         .json({ success: false, message: "Manager not found" });
+//     }
+
+//     const { assign_location: assignLocation, user_role: role } = managerRows[0];
+
+//     const today = new Date().toISOString().split("T")[0];
+
+//     let query = `
+//       SELECT vr.id AS visit_id,
+//              vr.schedule_date,
+//              vr.time_from,
+//              vr.time_to,
+//              vr.status,
+//              c.id AS lead_id,
+//              MAX(c.cust_name) AS cust_name,
+//              MAX(c.cust_email) AS cust_email,
+//              MAX(c.cust_mobile) AS cust_mobile,
+//              MAX(c.moving_from) AS moving_from,
+//              MAX(c.moving_to) AS moving_to,
+//              MAX(c.city_name) AS city_name,
+//              MAX(c.state_name) AS state_name,
+//              MAX(c.moving_type) AS moving_type,
+//              COUNT(inv.id) AS inventory_count
+//       FROM customer_visite_request vr
+//       JOIN ele_customer_lead c ON c.id = vr.lead_id
+//       LEFT JOIN ele_customer_inventory inv ON inv.lead_unique_id = c.id
+//       WHERE DATE(vr.created_at) = ? 
+//         AND (vr.status = 'pending' OR vr.status = 'started')
+//     `;
+
+//     const params = [today];
+
+//     if (role !== "Head_Manager") {
+//       query += ` AND c.city_name = ? `;
+//       params.push(assignLocation);
+//     }
+
+//     query += `
+//       GROUP BY vr.id, c.id
+//       ORDER BY vr.created_at DESC
+//     `;
+
+//     const [requests] = await db.promise().query(query, params);
+
+//     return res.json({
+//       success: true,
+//       date: today,
+//       count: requests.length,
+//       requests,
+//     });
+//   } catch (err) {
+//     console.error("Error fetching today's visit requests:", err);
+//     return res.status(500).json({ success: false, message: err.message });
+//   }
+// };
 export const getTodayVisitRequests = async (req, res) => {
   try {
     const { managerId } = req.query;
@@ -918,7 +930,6 @@ export const getTodayVisitRequests = async (req, res) => {
         .json({ success: false, message: "managerId is required" });
     }
 
-    // 🧩 Fetch manager details (for location filtering)
     const [managerRows] = await db
       .promise()
       .query(
@@ -934,18 +945,28 @@ export const getTodayVisitRequests = async (req, res) => {
 
     const { assign_location: assignLocation, user_role: role } = managerRows[0];
 
-    // 📅 Get today's date in YYYY-MM-DD format
     const today = new Date().toISOString().split("T")[0];
 
     let query = `
-      SELECT vr.id AS visit_id, vr.schedule_date, vr.time_from, vr.time_to, vr.status,
-             c.id AS lead_id, c.cust_name, c.cust_email, c.cust_mobile,
-             c.moving_from, c.moving_to, c.city_name, c.state_name, c.moving_type,
+      SELECT vr.id AS visit_id,
+             vr.schedule_date,
+             vr.time_from,
+             vr.time_to,
+             vr.status,
+             c.id AS lead_id,
+             MAX(c.cust_name) AS cust_name,
+             MAX(c.cust_email) AS cust_email,
+             MAX(c.cust_mobile) AS cust_mobile,
+             MAX(c.moving_from) AS moving_from,
+             MAX(c.moving_to) AS moving_to,
+             MAX(c.city_name) AS city_name,
+             MAX(c.state_name) AS state_name,
+             MAX(c.moving_type) AS moving_type,
              COUNT(inv.id) AS inventory_count
       FROM customer_visite_request vr
       JOIN ele_customer_lead c ON c.id = vr.lead_id
-      LEFT JOIN ele_customer_inventory inv ON inv.lead_unique_id = c.id
-      WHERE DATE(vr.schedule_date) = ? 
+      LEFT JOIN ele_customer_inventory inv ON inv.lead_unique_id = c.id AND inv.deleted_inventory = 0
+      WHERE DATE(vr.created_at) = ? 
         AND (vr.status = 'pending' OR vr.status = 'started')
     `;
 
@@ -958,7 +979,7 @@ export const getTodayVisitRequests = async (req, res) => {
 
     query += `
       GROUP BY vr.id, c.id
-      ORDER BY vr.schedule_date DESC
+      ORDER BY vr.created_at DESC
     `;
 
     const [requests] = await db.promise().query(query, params);
@@ -975,8 +996,7 @@ export const getTodayVisitRequests = async (req, res) => {
   }
 };
 
-// =================
-
+// ✅ Send Visit OTP
 export const sendVisitOtp = async (req, res) => {
   const { customerId } = req.body;
   console.log("customer id for visit", customerId);
@@ -1039,7 +1059,7 @@ export const sendVisitOtp = async (req, res) => {
   }
 };
 
-// POST /visit-request/verify-otp
+// ✅ Verify Visit OTP
 export const verifyVisitOtp = async (req, res) => {
   const { customerId, otp } = req.body;
 
@@ -1085,10 +1105,7 @@ export const verifyVisitOtp = async (req, res) => {
   }
 };
 
-// POST /manager/update-location
-
-// GET /manager/location/:id
-// controller.js
+// ✅ Get Manager Location
 export const getManagerLocation = async (req, res) => {
   const { managerId } = req.params;
   try {
@@ -1114,52 +1131,7 @@ export const getManagerLocation = async (req, res) => {
   }
 };
 
-// export const createVisitRequest = async (req, res) => {
-//   const { customerId, managerId } = req.body;
-
-//   if (!customerId || !managerId) {
-//     return res.json({
-//       success: false,
-//       error: "Missing customerId or managerId",
-//     });
-//   }
-
-//   try {
-//     // Record check karo lead_id ke basis pe
-//     const [rows] = await db
-//       .promise()
-//       .query("SELECT * FROM customer_visite_request WHERE lead_id = ?", [
-//         customerId,
-//       ]);
-
-//     if (rows.length === 0) {
-//       return res.json({
-//         success: false,
-//         error: "No visit request found for this customerId",
-//       });
-//     }
-
-//     // ✅ Sirf manager_id update karna hai
-//     await db
-//       .promise()
-//       .query(
-//         "UPDATE customer_visite_request SET manager_id = ?, status = 'pending' WHERE lead_id = ?",
-//         [managerId, customerId]
-//       );
-
-//     res.json({
-//       success: true,
-//       message: "Manager assigned to visit request successfully",
-//     });
-//   } catch (err) {
-//     console.error("Create visit request error:", err);
-//     res.json({ success: false, error: "Server error" });
-//   }
-// };
-
-// 10 - 10 - 2025
-// POST /manager/update-location
-
+// ✅ Create Visit Request
 export const createVisitRequest = async (req, res) => {
   const { customerId, managerId } = req.body;
 
@@ -1211,6 +1183,7 @@ export const createVisitRequest = async (req, res) => {
   }
 };
 
+// ✅ Start Visit Request
 export const startVisitRequest = async (req, res) => {
   const { customerId } = req.body;
   try {
@@ -1227,6 +1200,7 @@ export const startVisitRequest = async (req, res) => {
   }
 };
 
+// ✅ Update Manager Location
 export const updateManagerLocation = async (req, res) => {
   const { managerId, latitude, longitude } = req.body;
   console.log(
