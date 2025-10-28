@@ -8,7 +8,7 @@ const db = mysql.createPool({
 // DB_PASS=O$y2W$=[6!N#
 // DB_NAME=u874477730_unitedgulf
 
-  host: "http://13.49.243.156/",
+  host: "13.49.243.156",
 //   port: 3306,          // change to 3306 if that's your MySQL port
   user: "eleuser",
   password: "EleRoot@123",
