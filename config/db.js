@@ -9,7 +9,7 @@ const db = mysql.createPool({
 // DB_NAME=u874477730_unitedgulf
 
   host: "13.49.243.156",
-//   port: 3306,          // change to 3306 if that's your MySQL port
+  port: 3306,          // change to 3306 if that's your MySQL port
   user: "eleuser",
   password: "EleRoot@123",
   database: "premove",
