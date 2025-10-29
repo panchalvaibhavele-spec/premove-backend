@@ -1,27 +1,29 @@
 import mysql from "mysql2";
 
 const db = mysql.createPool({
-
-//     DB_HOST=srv917.hstgr.io
-// DB_PORT=3306
-// DB_USER=u874477730_unitedgulf
-// DB_PASS=O$y2W$=[6!N#
-// DB_NAME=u874477730_unitedgulf
-
   host: "13.49.243.156",
-  port: 3306,          // change to 3306 if that's your MySQL port
+  port: 3306,
   user: "eleuser",
   password: "EleRoot@123",
-  database: "premove",
-
-  // host: "srv917.hstgr.io",
-  // port: 3306,          // change to 3306 if that's your MySQL port
-  // user: "u874477730_unitedgulf",
-  // password: "O$y2W$=[6!N#",
-  // database: "u874477730_unitedgulf",
+  database: "myappdb",
+  // host: "localhost",
+  // // port: 3306,
+  // user: "root",
+  // password: "root",
+  // database: "premove",
   // waitForConnections: true,
-  // connectionLimit: 10,   // adjust based on load
+  // connectionLimit: 10,
   // queueLimit: 0,
+});
+
+// ✅ Automatically set session sql_mode for every new connection
+db.on('connection', (connection) => {
+  connection.query(
+    "SET SESSION sql_mode=(SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY',''))",
+    (err) => {
+      if (err) console.error("❌ Failed to set sql_mode for connection:", err);
+    }
+  );
 });
 
 db.getConnection((err) => {
