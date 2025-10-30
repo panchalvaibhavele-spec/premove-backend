@@ -1,3 +1,91 @@
+// import express from "express";
+// import cors from "cors";
+// import categoryRoutes from "./routes/categoryRoutes.js";
+// import auth from "./routes/auth.js";
+// import managerAuthRoutes from "./routes/managerAuthRoutes.js";
+// import videoRoutes from "./routes/videoRoutes.js";
+// import locationRoutes from "./routes/locationRoutes.js";
+// import path from "path";
+// import { fileURLToPath } from "url";
+// import { Server } from "socket.io";
+// import http from "http";
+
+// const __filename = fileURLToPath(import.meta.url);
+// const __dirname = path.dirname(__filename);
+
+// const app = express();
+// const server = http.createServer(app); // ✅ HTTP server for socket.io
+
+// // ✅ Attach socket.io
+// const io = new Server(server, {
+//   cors: {
+//     origin: "*",
+//     methods: ["GET", "POST"],
+//   },
+// });
+
+// app.use(cors());
+// app.use(express.json());
+// app.use(express.urlencoded({ extended: true }));
+
+// // Use Routes
+// app.use("/api", categoryRoutes);
+// app.use("/api", auth);
+// app.use("/api", managerAuthRoutes);
+// app.use("/api/videos", videoRoutes);
+// app.use("/api", locationRoutes);
+
+// // Serve static videos
+// app.use(
+//   "/uploads/videos",
+//   express.static(path.join(process.cwd(), "uploads/videos"), {
+//     setHeaders: (res, filePath) => {
+//       if (filePath.endsWith(".mp4")) {
+//         res.setHeader("Content-Type", "video/mp4");
+//       }
+//     },
+//   })
+// );
+
+// // ✅ Socket.IO handling
+// io.on("connection", (socket) => {
+//   console.log("🔥 Client connected:", socket.id);
+
+//   // When client registers itself
+//   socket.on("register", (data) => {
+//     console.log("Registered:", data);
+//     socket.join(data.type); // e.g. join "customer" or "manager"
+//   });
+
+//   // When customer sends location update
+//   socket.on("location:update", (payload) => {
+//     console.log("📍 Location from customer:", payload);
+
+//     // Send to all managers
+//     io.to("manager").emit("location:customer", payload);
+//   });
+
+//   socket.on("disconnect", () => {
+//     console.log("❌ Client disconnected:", socket.id);
+//   });
+// });
+
+// // Run server
+// const PORT = 5000;
+// server.listen(PORT, () => {
+//   console.log(`🚀 Server running on http://localhost:${PORT}`);
+// });
+
+
+
+
+
+
+
+
+
+
+
 import express from "express";
 import cors from "cors";
 import categoryRoutes from "./routes/categoryRoutes.js";
@@ -14,9 +102,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const server = http.createServer(app); // ✅ HTTP server for socket.io
+const server = http.createServer(app);
 
-// ✅ Attach socket.io
+// ✅ Allow all origins for testing — you can restrict later if needed
 const io = new Server(server, {
   cors: {
     origin: "*",
@@ -24,18 +112,19 @@ const io = new Server(server, {
   },
 });
 
+// ✅ Middlewares
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Use Routes
+// ✅ API Routes
 app.use("/api", categoryRoutes);
 app.use("/api", auth);
 app.use("/api", managerAuthRoutes);
 app.use("/api/videos", videoRoutes);
 app.use("/api", locationRoutes);
 
-// Serve static videos
+// ✅ Serve uploaded video files
 app.use(
   "/uploads/videos",
   express.static(path.join(process.cwd(), "uploads/videos"), {
@@ -47,21 +136,21 @@ app.use(
   })
 );
 
-// ✅ Socket.IO handling
+// ✅ Socket.IO setup
 io.on("connection", (socket) => {
   console.log("🔥 Client connected:", socket.id);
 
-  // When client registers itself
+  // Client registers (e.g. manager or customer)
   socket.on("register", (data) => {
     console.log("Registered:", data);
-    socket.join(data.type); // e.g. join "customer" or "manager"
+    socket.join(data.type); // e.g. "customer" or "manager"
   });
 
-  // When customer sends location update
+  // Customer sends live location update
   socket.on("location:update", (payload) => {
-    console.log("📍 Location from customer:", payload);
+    console.log("📍 Location update:", payload);
 
-    // Send to all managers
+    // Send to all connected managers
     io.to("manager").emit("location:customer", payload);
   });
 
@@ -70,23 +159,13 @@ io.on("connection", (socket) => {
   });
 });
 
-// Run server
-// const PORT = 5000;
-// server.listen(PORT, () => {
-//   console.log(`🚀 Server running on http://localhost:${PORT}`);
-// });
-
-// ✅ PORT for Render
-const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+// ✅ Default route
+app.get("/", (req, res) => {
+  res.send("🚀 Premove Backend is running successfully!");
 });
 
-
-
-
-
-
-
-
-
+// ✅ Use Render's dynamic port or fallback to 5000
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+});
