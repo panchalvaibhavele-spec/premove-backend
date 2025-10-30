@@ -166,6 +166,7 @@ app.get("/", (req, res) => {
 
 // ✅ Use Render's dynamic port or fallback to 5000
 const PORT = 5000;
-server.listen(PORT() => {
+server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
+
