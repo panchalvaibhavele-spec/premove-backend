@@ -1,7 +1,7 @@
 import express from "express";
 import multer from "multer";
 import path from "path";
-import { getLeadVideos, getManagerVideos, markVideoViewed, saveCustomerVideo } from "../controllers/videoController.js";
+import { deleteVideo, getLeadVideos, getManagerVideos, markVideoViewed, saveCustomerVideo } from "../controllers/videoController.js";
 
 const router = express.Router();
 
@@ -36,12 +36,10 @@ router.post("/upload", upload.single("video"), saveCustomerVideo);
 // GET /api/videos/manager-videos/:managerId
 router.get("/manager-videos/:managerId", getManagerVideos);
 
-
-
-
 // Lead videos by manager
 router.get("/lead-videos/:leadId/:managerId", getLeadVideos);
 
 // Mark video as viewed
 router.post("/mark-viewed", markVideoViewed);
+router.delete("/:id", deleteVideo);
 export default router;
