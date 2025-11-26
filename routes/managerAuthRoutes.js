@@ -21,6 +21,9 @@ import {
   createVisitRequest,
   startVisitRequest,
   getTodayVisitRequests,
+  getManagerLocationfontlead,
+  getManagerAllLeads,
+  getInventorySummary,
 } from "../controllers/managerAuthController.js";
 
 const router = express.Router();
@@ -71,5 +74,9 @@ router.post("/visit-request/create", createVisitRequest);
 router.get("/manager/location/:managerId", getManagerLocation);
 router.post("/visit-request/start", startVisitRequest);
 router.get("/manager/today-visit-requests", getTodayVisitRequests);
+// all leads
+router.get('/manager-location', getManagerLocationfontlead);
+router.get("/manager-leads", getManagerAllLeads);
+router.get("/inventory-summary", getInventorySummary);
 
 export default router;
