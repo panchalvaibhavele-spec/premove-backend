@@ -1,23 +1,55 @@
 import { api } from "../config/baseurl.js";
 import db from "../config/db.js"; // 👈 fixed path
+import axios from "axios"; // <--- ADD THIS
+import multer from "multer";
 
 // ✅ Get single lead by ID
+// export const getLeadById = async (req, res) => {
+//   const id = req.params.id;
+
+//   db.query(
+//     "SELECT * FROM ele_customer_lead WHERE id = ?",
+//     [id],
+//     (err, leads) => {
+//       if (err) return res.status(500).json({ error: "DB error" });
+
+//       res.json({
+//         success: true,
+//         total: leads.length,
+//         leads,
+//       });
+//     }
+//   );
+// };// ✅ Get single lead by ID with Home Size join
 export const getLeadById = async (req, res) => {
   const id = req.params.id;
 
-  db.query(
-    "SELECT * FROM ele_customer_lead WHERE id = ?",
-    [id],
-    (err, leads) => {
-      if (err) return res.status(500).json({ error: "DB error" });
+  const sql = `
+    SELECT 
+      l.*,
+      h.Home_size AS home_size_text
+    FROM 
+      ele_customer_lead l
+    LEFT JOIN 
+      home_type h 
+    ON 
+      l.home_type_id = h.id
+    WHERE 
+      l.id = ?
+  `;
 
-      res.json({
-        success: true,
-        total: leads.length,
-        leads,
-      });
+  db.query(sql, [id], (err, leads) => {
+    if (err) {
+      console.error("❌ DB Error:", err);
+      return res.status(500).json({ error: "DB error" });
     }
-  );
+
+    res.json({
+      success: true,
+      total: leads.length,
+      leads,
+    });
+  });
 };
 
 export const getAllItems = (req, res) => {
@@ -634,19 +666,49 @@ export const getHomeTypes = (req, res) => {
 
 // Account screen APIS
 // GET /profile/:phone
+// export const getProfile = (req, res) => {
+//   const { phone } = req.params;
+//   if (!phone) return res.status(400).json({ error: "Phone required" });
+
+//   db.query(
+//     "SELECT full_name, customer_email, customer_mobile_no, profile_photo FROM ele_customer_register WHERE customer_mobile_no=? LIMIT 1",
+//     [phone],
+//     (err, results) => {
+//       if (err) return res.status(500).json({ error: "DB error" });
+//       if (!results.length)
+//         return res.status(404).json({ error: "User not found" });
+
+//       res.json(results[0]);
+//     }
+//   );
+// };
 export const getProfile = (req, res) => {
   const { phone } = req.params;
   if (!phone) return res.status(400).json({ error: "Phone required" });
 
   db.query(
-    "SELECT full_name, customer_email, customer_mobile_no FROM ele_customer_register WHERE customer_mobile_no=? LIMIT 1",
+    "SELECT id, full_name, customer_email, customer_mobile_no, profile_photo FROM ele_customer_register WHERE customer_mobile_no=? LIMIT 1",
     [phone],
     (err, results) => {
       if (err) return res.status(500).json({ error: "DB error" });
       if (!results.length)
         return res.status(404).json({ error: "User not found" });
 
-      res.json(results[0]);
+      const user = results[0];
+
+      // Default profile image (host this in your server)
+      const defaultImage = "https://yourserver.com/default_avatar.png";
+
+      res.json({
+        id: user.id,
+        full_name: user.full_name,
+        customer_mobile_no: user.customer_mobile_no,
+        customer_email: user.customer_email,
+        profile_photo:
+          user.profile_photo && user.profile_photo.trim() !== ""
+            ? user.profile_photo
+            : defaultImage,
+      });
     }
   );
 };
@@ -666,6 +728,11 @@ export const createLead = (req, res) => {
     movingFromLng,
     movingToLat,
     movingToLng,
+    movingFromFloorNo,
+    movingToFloorNo,
+    movingFromServiceLift,
+    movingToServiceLift,
+    distance,
   } = req.body;
 
   if (!cust_name || !cust_mobile) {
@@ -679,8 +746,17 @@ export const createLead = (req, res) => {
 
   const sql = `
     INSERT INTO ele_customer_lead 
-      (lead_id, cust_name, cust_email, cust_mobile, moving_type, moving_from, moving_to, moving_date, home_type_id, city_name, movingFromLat, movingFromLng, movingToLat, movingToLng, lead_date, lead_generate_from)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE(), 1)
+      (
+        lead_id, cust_name, cust_email, cust_mobile, 
+        moving_type, moving_from, moving_to, moving_date, 
+        home_type_id, city_name,
+        movingFromLat, movingFromLng, movingToLat, movingToLng,
+        moving_from_floor_no, moving_to_floor_no,
+        moving_from_service_lift, moving_to_service_lift,
+        approx_dist,
+        lead_date, lead_generate_from, source
+      )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE(), 1, "premove_app")
   `;
 
   db.query(
@@ -700,96 +776,30 @@ export const createLead = (req, res) => {
       movingFromLng || null,
       movingToLat || null,
       movingToLng || null,
+      movingFromFloorNo || null,
+      movingToFloorNo || null,
+      movingFromServiceLift || 0,
+      movingToServiceLift || 0,
+      distance || null,
     ],
     (err, result) => {
       if (err) {
         console.error("❌ DB Insert Error:", err);
-        return res
-          .status(500)
-          .json({ success: false, message: "DB insert failed" });
+        return res.status(500).json({
+          success: false,
+          message: "DB insert failed",
+        });
       }
 
       return res.status(201).json({
         success: true,
         message: "Lead created successfully",
-        lead_id: result.insertId, // अब frontend को वही randomLeadId मिलेगा
+        lead_id: result.insertId,
       });
     }
   );
 };
 
-// export const createLead = (req, res) => {
-//   const {
-//     cust_name,
-//     cust_email,
-//     cust_mobile,
-//     moving_type,
-//     moving_from,
-//     moving_to,
-//     moving_date,
-//     home_type_id,
-//     city_name,
-//     customer_lat,
-//     customer_lng,
-//     movingFromLat,
-//     movingFromLng,
-//     movingToLat,
-//     movingToLng,
-//   } = req.body;
-
-//   if (!cust_name || !cust_mobile) {
-//     return res.status(400).json({
-//       success: false,
-//       message: "Customer name and mobile are required",
-//     });
-//   }
-
-//   const randomLeadId = `ELE${Math.floor(10000000 + Math.random() * 90000000)}`;
-
-//   const sql = `
-//     INSERT INTO ele_customer_lead
-//       (lead_id, cust_name, cust_email, cust_mobile, moving_type, moving_from, moving_to, moving_date, home_type_id, city_name, customer_lat, customer_lng, movingFromLat, movingFromLng, movingToLat, movingToLng, lead_date, lead_generate_from)
-//     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE(), 1)
-//   `;
-
-//   db.query(
-//     sql,
-//     [
-//       randomLeadId,
-//       cust_name || null,
-//       cust_email || null,
-//       cust_mobile || null,
-//       moving_type || null,
-//       moving_from || null,
-//       moving_to || null,
-//       moving_date || null,
-//       home_type_id || null,
-//       city_name || null,
-//       customer_lat || null,
-//       customer_lng || null,
-//       movingFromLat || null,
-//       movingFromLng || null,
-//       movingToLat || null,
-//       movingToLng || null,
-//     ],
-//     (err, result) => {
-//       if (err) {
-//         console.error("❌ DB Insert Error:", err);
-//         return res
-//           .status(500)
-//           .json({ success: false, message: "DB insert failed" });
-//       }
-
-//       return res.status(201).json({
-//         success: true,
-//         message: "Lead created successfully",
-//         lead_id: result.insertId,
-//       });
-//     }
-//   );
-// };
-
-// POST /profile/update/:phone
 export const updateProfile = (req, res) => {
   const { phone } = req.params;
   const { full_name, customer_email } = req.body;
@@ -830,6 +840,41 @@ export const updateProfile = (req, res) => {
 };
 
 // POST /feedback
+
+
+// =======
+
+// const upload = multer({ dest: "uploads/" });
+
+export const updateProfileImage = (req, res) => {
+  const { phone } = req.params;
+
+  if (!req.file) {
+    return res.status(400).json({ error: "No image uploaded" });
+  }
+
+  // FULL URL (this is VERY IMPORTANT)
+  const imageUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+
+  db.query(
+    "UPDATE ele_customer_register SET profile_photo=? WHERE customer_mobile_no=?",
+    [imageUrl, phone],
+    (err) => {
+      if (err) return res.status(500).json({ error: "Image update failed" });
+
+      res.json({
+        success: true,
+        message: "Image updated successfully",
+        profile_photo: imageUrl,
+      });
+    }
+  );
+};
+
+
+
+
+
 export const submitFeedback = (req, res) => {
   const { phone, experience, option, comments } = req.body;
   if (!phone || !experience) {
@@ -1376,12 +1421,10 @@ export const scheduleVisit = (req, res) => {
                       (err5, insertedRows) => {
                         if (err5) {
                           console.error("❌ Fetch Error:", err5);
-                          return res
-                            .status(500)
-                            .json({
-                              success: false,
-                              message: "Database error",
-                            });
+                          return res.status(500).json({
+                            success: false,
+                            message: "Database error",
+                          });
                         }
 
                         res.json({
@@ -1516,12 +1559,13 @@ export const getManagerDetails = async (req, res) => {
 export const getVisitStatus = (req, res) => {
   const { leadId } = req.params;
 
-  const query = 'SELECT status FROM customer_visite_request WHERE lead_id = ? LIMIT 1';
+  const query =
+    "SELECT status FROM customer_visite_request WHERE lead_id = ? LIMIT 1";
 
   db.query(query, [leadId], (err, rows) => {
     if (err) {
-      console.error('❌ Error fetching visit status:', err);
-      return res.status(500).json({ error: 'Server error' });
+      console.error("❌ Error fetching visit status:", err);
+      return res.status(500).json({ error: "Server error" });
     }
 
     if (rows.length > 0) {
@@ -1534,14 +1578,20 @@ export const getVisitStatus = (req, res) => {
 
 export const checkVisit = (req, res) => {
   const { lead_id } = req.body || {};
-  console.log("lead id  backend" , lead_id)
-  if (!lead_id) return res.status(400).json({ success: false, message: 'lead_id required' });
+  console.log("lead id  backend", lead_id);
+  if (!lead_id)
+    return res
+      .status(400)
+      .json({ success: false, message: "lead_id required" });
 
   db.query(
     "SELECT * FROM customer_visite_request WHERE lead_id = ?",
     [lead_id],
     (err, rows) => {
-      if (err) return res.status(500).json({ success: false, message: 'Database error' });
+      if (err)
+        return res
+          .status(500)
+          .json({ success: false, message: "Database error" });
       if (rows.length > 0) {
         return res.json({
           success: true,
@@ -1554,4 +1604,178 @@ export const checkVisit = (req, res) => {
       }
     }
   );
+};
+
+// ========================manager accept
+
+export const managerAcceptVisit = (req, res) => {
+  const { request_id } = req.body;
+
+  if (!request_id)
+    return res.json({ success: false, message: "request_id required" });
+
+  const q = `
+    UPDATE customer_visite_request 
+    SET manager_accept_status='accepted', customer_accept_status='accepted', status='approved'
+    WHERE id=?
+  `;
+
+  db.query(q, [request_id], (err, result) => {
+    if (err) return res.json({ success: false, message: "DB error" });
+
+    return res.json({
+      success: true,
+      message: "Inspection visit accepted successfully",
+    });
+  });
+};
+
+export const managerRescheduleVisit = (req, res) => {
+  const { request_id, new_date, new_time_from, new_time_to, reason } = req.body;
+
+  if (!request_id || !new_date || !new_time_from || !new_time_to || !reason) {
+    return res.status(400).json({ success: false, message: "Missing fields" });
+  }
+
+  // STEP 1: Fetch original visit row (to get customer_number + manager_id)
+  const selectQuery = "SELECT * FROM customer_visite_request WHERE id = ?";
+
+  db.query(selectQuery, [request_id], async (err, rows) => {
+    if (err) {
+      console.log(err);
+      return res.status(500).json({ success: false, message: "DB Error" });
+    }
+
+    if (rows.length === 0) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Visit request not found" });
+    }
+
+    const visit = rows[0];
+    const customer_number = visit.customer_number;
+    const customer_name = visit.customer_name;
+
+    // STEP 2: Update reschedule fields
+    const updateQuery = `
+      UPDATE customer_visite_request 
+      SET 
+        manager_reschedule_date = ?,
+        manager_reschedule_time_from = ?,
+        manager_reschedule_time_to = ?,
+        reschedule_reason = ?,
+        status = 'reschedule_by_manager',
+        manager_accept_status = 'pending',
+        customer_accept_status = 'pending'
+      WHERE id = ?
+    `;
+
+    db.query(
+      updateQuery,
+      [new_date, new_time_from, new_time_to, reason, request_id],
+      async (err2, result) => {
+        if (err2) {
+          console.log(err2);
+          return res
+            .status(500)
+            .json({ success: false, message: "Update failed" });
+        }
+
+        // STEP 3: Send WhatsApp message to customer
+        try {
+          await axios.post(
+            "http://whatsappapi.keepintouch.co.in/api/sendText",
+            {
+              token: "6103d1857f26a4cb49bbc8cc",
+              phone: customer_number,
+              message: `Hello ${customer_name},\n\nYour manager has requested to reschedule your visit.\n\n📅 New Date: ${new_date}\n⏰ Time: ${new_time_from} - ${new_time_to}\n📝 Reason: ${reason}\n\nPlease check and respond.`,
+            }
+          );
+        } catch (wErr) {
+          console.log("WhatsApp Error:", wErr);
+        }
+
+        return res.json({
+          success: true,
+          message: "Visit rescheduled successfully",
+        });
+      }
+    );
+  });
+};
+
+export const customerAcceptReschedule = (req, res) => {
+  const { request_id } = req.body;
+
+  const q = `
+    UPDATE customer_visite_request 
+    SET customer_accept_status='accepted', status='approved'
+    WHERE id=?
+  `;
+
+  db.query(q, [request_id], (err) => {
+    if (err) return res.json({ success: false, message: "DB error" });
+
+    return res.json({ success: true, message: "Reschedule accepted" });
+  });
+};
+
+export const customerRescheduleVisit = (req, res) => {
+  const { request_id, new_date, new_time_from, new_time_to, reason } = req.body;
+
+  // Step 1: get customer phone number + manager id from DB
+  const getUserQuery = `
+    SELECT customer_number, manager_id 
+    FROM customer_visite_request 
+    WHERE id=?
+  `;
+
+  db.query(getUserQuery, [request_id], (err, result) => {
+    if (err) return res.json({ success: false, message: "DB error" });
+
+    if (result.length === 0)
+      return res.json({ success: false, message: "Request not found" });
+
+    const customer_number = result[0].customer_number;
+    const manager_id = result[0].manager_id;
+
+    // Step 2: Update reschedule
+    const updateQuery = `
+      UPDATE customer_visite_request 
+      SET 
+        manager_reschedule_date=?, 
+        manager_reschedule_time_from=?, 
+        manager_reschedule_time_to=?, 
+        reschedule_reason=?,
+        status='reschedule_by_customer',
+        customer_accept_status='pending',
+        manager_accept_status='pending'
+      WHERE id=?
+    `;
+
+    db.query(
+      updateQuery,
+      [new_date, new_time_from, new_time_to, reason, request_id],
+      (err2) => {
+        if (err2) {
+          console.log(err2);
+          return res.json({ success: false, message: "Update failed" });
+        }
+
+        // Step 3: Send WhatsApp to Manager
+        axios
+          .post("http://whatsappapi.keepintouch.co.in/api/sendText", {
+            token: "6103d1857f26a4cb49bbc8cc",
+            phone: customer_number,
+            message: `Customer requested reschedule:\n📅 ${new_date}\n⏰ ${new_time_from} - ${new_time_to}\nReason: ${reason}`,
+          })
+          .catch((err) => console.log("WhatsApp Error", err));
+
+        return res.json({
+          success: true,
+          message: "Visit rescheduled by customer",
+        });
+      }
+    );
+  });
 };
