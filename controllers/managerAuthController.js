@@ -890,7 +890,7 @@ export const getVisitRequests = async (req, res) => {
 //       FROM customer_visite_request vr
 //       JOIN ele_customer_lead c ON c.id = vr.lead_id
 //       LEFT JOIN ele_customer_inventory inv ON inv.lead_unique_id = c.id
-//       WHERE DATE(vr.created_at) = ? 
+//       WHERE DATE(vr.created_at) = ?
 //         AND (vr.status = 'pending' OR vr.status = 'started')
 //     `;
 
@@ -919,6 +919,84 @@ export const getVisitRequests = async (req, res) => {
 //     return res.status(500).json({ success: false, message: err.message });
 //   }
 // };
+// ==================================================================+++++
+// export const getTodayVisitRequests = async (req, res) => {
+//   try {
+//     const { managerId } = req.query;
+//     console.log("manager id", managerId);
+
+//     if (!managerId) {
+//       return res
+//         .status(400)
+//         .json({ success: false, message: "managerId is required" });
+//     }
+
+//     const [managerRows] = await db
+//       .promise()
+//       .query(
+//         "SELECT assign_location, user_role FROM ele_customer_manager WHERE id = ?",
+//         [managerId]
+//       );
+
+//     if (!managerRows.length) {
+//       return res
+//         .status(404)
+//         .json({ success: false, message: "Manager not found" });
+//     }
+
+//     const { assign_location: assignLocation, user_role: role } = managerRows[0];
+
+//     const today = new Date().toISOString().split("T")[0];
+
+//     let query = `
+//       SELECT vr.id AS visit_id,
+//              vr.schedule_date,
+//              vr.time_from,
+//              vr.time_to,
+//              vr.status,
+//              c.id AS lead_id,
+//              MAX(c.cust_name) AS cust_name,
+//              MAX(c.cust_email) AS cust_email,
+//              MAX(c.cust_mobile) AS cust_mobile,
+//              MAX(c.moving_from) AS moving_from,
+//              MAX(c.moving_to) AS moving_to,
+//              MAX(c.city_name) AS city_name,
+//              MAX(c.state_name) AS state_name,
+//              MAX(c.moving_type) AS moving_type,
+//              COUNT(inv.id) AS inventory_count
+//       FROM customer_visite_request vr
+//       JOIN ele_customer_lead c ON c.id = vr.lead_id
+//       LEFT JOIN ele_customer_inventory inv ON inv.lead_unique_id = c.id AND inv.deleted_inventory = 0
+//       WHERE DATE(vr.created_at) = ?
+//         AND (vr.status = 'pending' OR vr.status = 'started')
+//     `;
+
+//     const params = [today];
+
+//     if (role !== "Head_Manager") {
+//       query += ` AND c.city_name = ? `;
+//       params.push(assignLocation);
+//     }
+
+//     query += `
+//       GROUP BY vr.id, c.id
+//       ORDER BY vr.created_at DESC
+//     `;
+
+//     const [requests] = await db.promise().query(query, params);
+
+//     return res.json({
+//       success: true,
+//       date: today,
+//       count: requests.length,
+//       requests,
+//     });
+//   } catch (err) {
+//     console.error("Error fetching today's visit requests:", err);
+//     return res.status(500).json({ success: false, message: err.message });
+//   }
+// };
+
 export const getTodayVisitRequests = async (req, res) => {
   try {
     const { managerId } = req.query;
@@ -965,9 +1043,15 @@ export const getTodayVisitRequests = async (req, res) => {
              COUNT(inv.id) AS inventory_count
       FROM customer_visite_request vr
       JOIN ele_customer_lead c ON c.id = vr.lead_id
-      LEFT JOIN ele_customer_inventory inv ON inv.lead_unique_id = c.id AND inv.deleted_inventory = 0
-      WHERE DATE(vr.created_at) = ? 
-        AND (vr.status = 'pending' OR vr.status = 'started')
+      LEFT JOIN ele_customer_inventory inv 
+           ON inv.lead_unique_id = c.id AND inv.deleted_inventory = 0
+      WHERE DATE(vr.created_at) = ?
+        AND vr.status IN (
+             'pending',
+             'started',
+             'reschedule_by_customer',
+             'reschedule_by_manager'
+        )
     `;
 
     const params = [today];
@@ -995,6 +1079,8 @@ export const getTodayVisitRequests = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
+
+// ==================================================================+++++
 
 // ✅ Send Visit OTP
 export const sendVisitOtp = async (req, res) => {
@@ -1132,6 +1218,58 @@ export const getManagerLocation = async (req, res) => {
 };
 
 // ✅ Create Visit Request
+// export const createVisitRequest = async (req, res) => {
+//   const { customerId, managerId } = req.body;
+
+//   if (!customerId || !managerId) {
+//     return res.json({
+//       success: false,
+//       error: "Missing customerId or managerId",
+//     });
+//   }
+
+//   try {
+//     const [rows] = await db
+//       .promise()
+//       .query("SELECT * FROM customer_visite_request WHERE lead_id = ?", [
+//         customerId,
+//       ]);
+
+//     if (rows.length === 0) {
+//       return res.json({
+//         success: false,
+//         error: "No visit request found for this customerId",
+//       });
+//     }
+
+//     // 🔥 check status
+//     const visit = rows[0];
+//     if (visit.status === "completed") {
+//       return res.json({
+//         success: false,
+//         error: "Inspection already completed for this customer",
+//       });
+//     }
+
+//     // ✅ Update manager_id if pending
+//     await db
+//       .promise()
+//       .query(
+//         "UPDATE customer_visite_request SET manager_id = ?, status = 'pending' WHERE lead_id = ?",
+//         [managerId, customerId]
+//       );
+
+//     res.json({
+//       success: true,
+//       message: "Manager assigned to visit request successfully",
+//     });
+//   } catch (err) {
+//     console.error("Create visit request error:", err);
+//     res.json({ success: false, error: "Server error" });
+//   }
+// };
+
+// =============+++++++++++++++++++++++++++=============
 export const createVisitRequest = async (req, res) => {
   const { customerId, managerId } = req.body;
 
@@ -1156,8 +1294,9 @@ export const createVisitRequest = async (req, res) => {
       });
     }
 
-    // 🔥 check status
     const visit = rows[0];
+
+    // ❌ If completed → no visit allowed
     if (visit.status === "completed") {
       return res.json({
         success: false,
@@ -1165,23 +1304,37 @@ export const createVisitRequest = async (req, res) => {
       });
     }
 
-    // ✅ Update manager_id if pending
+    // ❌ If NOT approved → no inspection allowed
+    if (
+      visit.status !== "approved" ||
+      visit.manager_accept_status !== "accepted" ||
+      visit.customer_accept_status !== "accepted"
+    ) {
+      return res.json({
+        success: false,
+        error: "Visit request is not approved yet",
+      });
+    }
+
+    // 🟢 If approved → Assign manager & allow visit
     await db
       .promise()
       .query(
-        "UPDATE customer_visite_request SET manager_id = ?, status = 'pending' WHERE lead_id = ?",
+        "UPDATE customer_visite_request SET manager_id = ? WHERE lead_id = ?",
         [managerId, customerId]
       );
 
-    res.json({
+    return res.json({
       success: true,
-      message: "Manager assigned to visit request successfully",
+      message: "Visit approved. Inspection can be started.",
     });
   } catch (err) {
     console.error("Create visit request error:", err);
-    res.json({ success: false, error: "Server error" });
+    return res.json({ success: false, error: "Server error" });
   }
 };
+
+// =============+++++++++++++++++++++++++++=============
 
 // ✅ Start Visit Request
 export const startVisitRequest = async (req, res) => {
@@ -1232,4 +1385,113 @@ export const updateManagerLocation = async (req, res) => {
     console.error("Update manager location error:", err);
     res.json({ success: false, error: "Server error" });
   }
+};
+
+// all leads for manager
+
+// GET manager location by manager ID
+export const getManagerLocationfontlead = (req, res) => {
+  const managerId = req.query.manager_id;
+
+  if (!managerId) {
+    return res.status(400).json({
+      success: false,
+      message: "manager_id is required",
+    });
+  }
+
+  const sql = `
+      SELECT assign_location 
+      FROM ele_customer_manager
+      WHERE id = ?
+  `;
+
+  db.query(sql, [managerId], (err, rows) => {
+    if (err) {
+      return res.status(500).json({ success: false, error: err });
+    }
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Manager not found",
+      });
+    }
+
+    return res.json({
+      success: true,
+      assign_location: rows[0].assign_location,
+    });
+  });
+};
+
+
+
+export const getManagerAllLeads = (req, res) => {
+  const location = req.query.location;
+
+  if (!location) {
+    return res.status(400).json({
+      success: false,
+      message: "location is required",
+    });
+  }
+
+  const sql = `
+    SELECT *
+    FROM ele_customer_lead
+    WHERE city_name = ?
+    ORDER BY created_date ASC
+  `;
+
+  db.query(sql, [location], (err, results) => {
+    if (err) {
+      return res.status(500).json({
+        success: false,
+        error: err,
+      });
+    }
+
+    return res.json({
+      success: true,
+      total: results.length,
+      leads: results,
+    });
+  });
+};
+
+
+export const getInventorySummary = (req, res) => {
+  const leadId = req.query.lead_id;
+
+  if (!leadId) {
+    return res.status(400).json({
+      success: false,
+      message: "lead_id is required",
+    });
+  }
+
+  const sql = `
+    SELECT 
+      SUM(quantity) AS total_items,
+      COUNT(id) AS total_rows
+    FROM ele_customer_inventory
+    WHERE lead_unique_id = ?
+      AND deleted_inventory = 0
+  `;
+
+  db.query(sql, [leadId], (err, rows) => {
+    if (err) {
+      return res.status(500).json({
+        success: false,
+        error: err,
+      });
+    }
+
+    return res.json({
+      success: true,
+      total_items: rows[0].total_items || 0,
+      total_rows: rows[0].total_rows || 0,
+    });
+  });
 };
