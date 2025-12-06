@@ -93,6 +93,7 @@ import auth from "./routes/auth.js";
 import managerAuthRoutes from "./routes/managerAuthRoutes.js";
 import videoRoutes from "./routes/videoRoutes.js";
 import locationRoutes from "./routes/locationRoutes.js";
+// import eleCrm from "./routes/eleCrm.js";
 import path from "path";
 import { fileURLToPath } from "url";
 import { Server } from "socket.io";
@@ -123,7 +124,7 @@ app.use("/api", auth);
 app.use("/api", managerAuthRoutes);
 app.use("/api/videos", videoRoutes);
 app.use("/api", locationRoutes);
-
+// app.use("/api", eleCrm);
 // ✅ Serve uploaded video files
 app.use(
   "/uploads/videos",
@@ -135,6 +136,8 @@ app.use(
     },
   })
 );
+// ⭐ Serve uploaded images
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 // ✅ Socket.IO setup
 io.on("connection", (socket) => {
